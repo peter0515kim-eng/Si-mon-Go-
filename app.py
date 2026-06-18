@@ -470,18 +470,29 @@ def show_employer():
                     photo_url = app.get("completion_photo_url")
                     st.markdown(f'<div style="padding:8px 0;font-size:14px;color:#444;">📝 {note}</div>', unsafe_allow_html=True)
                     if photo_url:
-                        st.image(photo_url, width=280)
+                        try:
+                            st.image(photo_url, width=280)
+                        except Exception:
+                            st.caption(f"사진 로드 실패 — [직접 열기]({photo_url})")
+                    else:
+                        st.caption("(인증 사진 없음)")
                     if st.button("💰 수령 완료 처리", key=f"pay_{app['id']}", type="primary"):
+                        # 1단계: application 상태 업데이트 (핵심)
                         try:
                             supabase.table("applications").update({"status": "COMPLETED"}).eq("id", app["id"]).execute()
-                            mid = mission.get("id") or app.get("mission_id")
-                            if mid:
+                        except Exception as e:
+                            st.error(f"완료 처리 실패: {e}")
+                            st.stop()
+                        # 2단계: 미션 삭제 (실패해도 완료 처리는 유지)
+                        mid = mission.get("id") or app.get("mission_id")
+                        if mid:
+                            try:
                                 supabase.table("missions").delete().eq("id", mid).execute()
-                            st.success("완료 처리되었습니다!")
-                            st.balloons()
-                            st.rerun()
-                        except Exception:
-                            st.error("오류가 발생했습니다.")
+                            except Exception:
+                                pass  # 삭제 실패는 무시 — 완료 처리는 이미 됨
+                        st.success("완료 처리되었습니다!")
+                        st.balloons()
+                        st.rerun()
 
 # ─── Senior View ──────────────────────────────────────────────────────────────
 def show_senior():
