@@ -232,8 +232,9 @@ def show_signup():
                     if err:
                         st.error(f"❌ {err}")
                     else:
-                        st.success("✅ 가입이 완료되었습니다!")
-                        st.info("📧 가입하신 이메일로 인증 메일이 발송되었습니다. 메일함을 확인 후 로그인해 주세요.")
+                        st.success("✅ 가입이 완료되었습니다! 로그인 페이지로 이동합니다...")
+                        st.session_state["auth_page"] = "login"
+                        st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("이미 계정이 있으신가요?")
