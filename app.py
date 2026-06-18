@@ -17,14 +17,15 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ─── Session State Init ──────────────────────────────────────────────────────
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-if "user_id" not in st.session_state:
-    st.session_state["user_id"] = None
-if "user_role" not in st.session_state:
-    st.session_state["user_role"] = None
-if "user_nickname" not in st.session_state:
-    st.session_state["user_nickname"] = None
+for key, default in {
+    "logged_in":     False,
+    "user_id":       None,
+    "user_role":     None,
+    "user_nickname": None,
+    "auth_page":     "login",   # "login" | "signup"
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # ─── DB Helper Functions ──────────────────────────────────────────────────────
 def db_get_categories():
@@ -91,6 +92,66 @@ STATUS_LABELS = {
 }
 
 
+# ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
+def do_login(email: str, password: str):
+    """Supabase Auth 로그인 → 프로필 조회 → 세션 설정. 오류 메시지 반환, 성공 시 None."""
+    try:
+        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        user = res.user
+        if not user:
+            return "이메일 또는 비밀번호가 올바르지 않습니다."
+
+        profile = (
+            supabase.table("profiles")
+            .select("id, nickname, role_type")
+            .eq("id", user.id)
+            .execute()
+            .data
+        )
+        if not profile:
+            return "프로필 정보를 찾을 수 없습니다. 다시 가입해 주세요."
+
+        p = profile[0]
+        st.session_state["logged_in"]     = True
+        st.session_state["user_id"]       = p["id"]
+        st.session_state["user_role"]     = p["role_type"]
+        st.session_state["user_nickname"] = p["nickname"]
+        return None
+    except Exception as e:
+        msg = str(e)
+        if "Email not confirmed" in msg:
+            return "이메일 인증이 필요합니다. 가입 시 받은 인증 메일을 확인해 주세요."
+        if "Invalid login credentials" in msg:
+            return "이메일 또는 비밀번호가 올바르지 않습니다."
+        return "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+
+
+def do_signup(email: str, password: str, nickname: str, role: str):
+    """Supabase Auth 회원가입 → profiles 삽입. 오류 메시지 반환, 성공 시 None."""
+    try:
+        res = supabase.auth.sign_up({"email": email, "password": password})
+        user = res.user
+        if not user:
+            return "회원가입 처리 중 오류가 발생했습니다."
+
+        supabase.table("profiles").insert({
+            "id":           user.id,
+            "email":        email,
+            "nickname":     nickname,
+            "role_type":    role,
+            "phone_number": "000-0000-0000",
+        }).execute()
+
+        return None
+    except Exception as e:
+        msg = str(e)
+        if "User already registered" in msg:
+            return "이미 가입된 이메일입니다."
+        if "Password should be at least" in msg:
+            return "비밀번호는 최소 6자 이상이어야 합니다."
+        return f"회원가입 중 오류가 발생했습니다: {msg}"
+
+
 # ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 def show_login():
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -102,65 +163,110 @@ def show_login():
         st.subheader("로그인")
 
         with st.form("login_form"):
-            email    = st.text_input("이메일", placeholder="example@email.com")
-            password = st.text_input("비밀번호", type="password", placeholder="비밀번호 입력")
+            email     = st.text_input("이메일", placeholder="example@email.com")
+            password  = st.text_input("비밀번호", type="password", placeholder="비밀번호 입력")
             login_btn = st.form_submit_button("로그인", type="primary", use_container_width=True)
 
             if login_btn:
-                if not email.strip():
-                    st.error("❌ 이메일을 입력해주세요.")
+                if not email.strip() or not password.strip():
+                    st.error("❌ 이메일과 비밀번호를 모두 입력해주세요.")
                 else:
-                    try:
-                        res = (
-                            supabase.table("profiles")
-                            .select("id, nickname, role_type")
-                            .eq("email", email.strip())
-                            .execute()
-                        )
-                        if not res.data:
-                            st.error("❌ 등록되지 않은 이메일입니다.")
-                        else:
-                            user = res.data[0]
-                            st.session_state["logged_in"]    = True
-                            st.session_state["user_id"]      = user["id"]
-                            st.session_state["user_role"]    = user["role_type"]
-                            st.session_state["user_nickname"] = user["nickname"]
-                            st.rerun()
-                    except Exception:
-                        st.error("❌ 로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                    err = do_login(email.strip(), password.strip())
+                    if err:
+                        st.error(f"❌ {err}")
+                    else:
+                        st.rerun()
 
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("계정이 없으신가요?")
+        if st.button("회원가입하기", use_container_width=True):
+            st.session_state["auth_page"] = "signup"
+            st.rerun()
+
+
+# ─── SIGNUP PAGE ──────────────────────────────────────────────────────────────
+def show_signup():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.title("🎯 시몬고 (Si-Mon-GO)")
+        st.caption("데이터 기반 액티브 시니어 활력 플랫폼")
         st.markdown("---")
-        with st.expander("🔑 테스트 계정 보기"):
-            st.markdown("""
-| 역할 | 이메일 | 비밀번호 |
-|------|--------|---------|
-| 고용자 | employer1@example.com | (아무거나) |
-| 고용자 | employer2@example.com | (아무거나) |
-| 시니어 | senior1@example.com   | (아무거나) |
-""")
-            st.caption("※ 현재 데모 버전은 이메일만 확인합니다.")
+        st.subheader("회원가입")
+
+        with st.form("signup_form"):
+            email    = st.text_input("이메일 *", placeholder="example@email.com")
+            password = st.text_input("비밀번호 *", type="password", placeholder="6자 이상")
+            pw_check = st.text_input("비밀번호 확인 *", type="password", placeholder="비밀번호 재입력")
+            nickname = st.text_input("닉네임 *", placeholder="앱에서 표시될 이름")
+
+            st.markdown("**역할 선택 \\***")
+            role = st.radio(
+                "역할",
+                options=["Senior", "Employer"],
+                format_func=lambda r: "🧑 시니어 (일감 수행)" if r == "Senior" else "👨‍💼 고용주 (일감 등록)",
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+            signup_btn = st.form_submit_button("가입하기", type="primary", use_container_width=True)
+
+            if signup_btn:
+                errors = []
+                if not email.strip():
+                    errors.append("이메일을 입력해주세요.")
+                if not password.strip():
+                    errors.append("비밀번호를 입력해주세요.")
+                elif len(password) < 6:
+                    errors.append("비밀번호는 최소 6자 이상이어야 합니다.")
+                elif password != pw_check:
+                    errors.append("비밀번호가 일치하지 않습니다.")
+                if not nickname.strip():
+                    errors.append("닉네임을 입력해주세요.")
+
+                if errors:
+                    for e in errors:
+                        st.error(f"❌ {e}")
+                else:
+                    err = do_signup(email.strip(), password.strip(), nickname.strip(), role)
+                    if err:
+                        st.error(f"❌ {err}")
+                    else:
+                        st.success("✅ 가입이 완료되었습니다!")
+                        st.info("📧 가입하신 이메일로 인증 메일이 발송되었습니다. 메일함을 확인 후 로그인해 주세요.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("이미 계정이 있으신가요?")
+        if st.button("로그인으로 돌아가기", use_container_width=True):
+            st.session_state["auth_page"] = "login"
+            st.rerun()
 
 
 # ─── SIDEBAR (로그인 후) ──────────────────────────────────────────────────────
 def show_sidebar():
-    st.sidebar.title("🎯 시몬고 제어 센터")
-    st.sidebar.markdown(f"**👤 {st.session_state['user_nickname']}**")
-    role_label = "👨‍💼 고용자" if st.session_state["user_role"] == "Employer" else "🧑 시니어"
-    st.sidebar.caption(role_label)
+    st.sidebar.title("🎯 시몬고")
+    role_label = "👨‍💼 고용주" if st.session_state["user_role"] == "Employer" else "🧑 시니어"
+    st.sidebar.markdown(f"**{st.session_state['user_nickname']}** ({role_label})")
     st.sidebar.markdown("---")
 
     if st.session_state["user_role"] == "Senior":
-        st.sidebar.markdown("**📊 시니어 성실도 지표**")
-        st.sidebar.latex(
-            r"Sincerity\_Score = \left(\frac{N_{valid}}{N_{total}}\right) \times 100"
+        st.sidebar.markdown("**📊 성실도 안내**")
+        st.sidebar.info(
+            "매칭 수락 후 미션을 수행하지 않거나 완료 보고를 미제출하면 "
+            "성실도 점수가 하락합니다. 성실도가 낮을 경우 향후 매칭 수락이 "
+            "제한될 수 있으니 책임감 있게 참여해 주세요."
         )
-        st.sidebar.caption("N_total: 총 기대 핑 수 / N_valid: 허용 반경 내 유효 위치 핑 수")
         st.sidebar.markdown("---")
 
     if st.sidebar.button("🚪 로그아웃", use_container_width=True):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
         for key in ["logged_in", "user_id", "user_role", "user_nickname"]:
             st.session_state[key] = None
         st.session_state["logged_in"] = False
+        st.session_state["auth_page"] = "login"
         st.rerun()
 
 
@@ -169,7 +275,6 @@ def show_employer():
     st.title("👨‍💼 고용주 관제 대시보드")
     tab_reg, tab_mgmt = st.tabs(["➕ 신규 미션 등록", "📋 지원자 현황 관리"])
 
-    # ── Tab 1: Mission Registration ──
     with tab_reg:
         st.subheader("신규 미션 등록 구역")
         categories = db_get_categories()
@@ -209,7 +314,6 @@ def show_employer():
                         except Exception:
                             st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
 
-    # ── Tab 2: Applicant Management ──
     with tab_mgmt:
         st.subheader("지원자 현황 및 매칭 결정")
         apps = db_get_applications_for_employer(st.session_state["user_id"])
@@ -238,7 +342,7 @@ def show_employer():
                                     ).eq("id", app["id"]).execute()
                                     st.rerun()
                                 except Exception:
-                                    st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                                    st.error("❌ 작업 중 오류가 발생했습니다.")
                         with c2:
                             if st.button("❌ 거절", key=f"rej_{app['id']}"):
                                 try:
@@ -247,7 +351,7 @@ def show_employer():
                                     ).eq("id", app["id"]).execute()
                                     st.rerun()
                                 except Exception:
-                                    st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                                    st.error("❌ 작업 중 오류가 발생했습니다.")
 
                     elif status == "SUBMITTED":
                         note      = app.get("completion_note") or ""
@@ -263,14 +367,14 @@ def show_employer():
                                 supabase.table("applications").update(
                                     {"status": "COMPLETED"}
                                 ).eq("id", app["id"]).execute()
-                                mission_id = (app.get("missions") or {}).get("id") or app.get("mission_id")
+                                mission_id = mission.get("id") or app.get("mission_id")
                                 if mission_id:
                                     supabase.table("missions").delete().eq("id", mission_id).execute()
                                 st.success("✅ 금액 수령 완료! 해당 미션이 종료되었습니다.")
                                 st.balloons()
                                 st.rerun()
                             except Exception:
-                                st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                                st.error("❌ 작업 중 오류가 발생했습니다.")
 
 
 # ─── SENIOR VIEW ──────────────────────────────────────────────────────────────
@@ -278,7 +382,6 @@ def show_senior():
     st.title("🎯 시몬고 실시간 미션 보드")
     tab_board, tab_mine = st.tabs(["🔍 일감 찾기 보드", "🎯 나의 지원/매칭 현황"])
 
-    # ── Tab 1: Mission Board ──
     with tab_board:
         all_missions   = db_get_all_missions()
         my_apps        = db_get_senior_applications(st.session_state["user_id"])
@@ -301,7 +404,6 @@ def show_senior():
             for m in all_missions:
                 cat     = (m.get("categories") or {}).get("name", "기타")
                 outdoor = m.get("is_outdoor", False)
-                weather = "🌤️ 실외" if outdoor else "🏠 실내"
                 applied = m["id"] in applied_ids
                 label   = (
                     f"{'🌤️' if outdoor else '🏠'} {cat} / "
@@ -314,7 +416,7 @@ def show_senior():
                     with col_l:
                         st.markdown(f"**💰 보상:** {m.get('reward', 0):,}원")
                         st.markdown(f"**📍 위치:** {m.get('location_name', '')}")
-                        st.markdown(f"**🏷️ 분류:** {cat} | {weather}")
+                        st.markdown(f"**🏷️ 분류:** {cat} | {'🌤️ 실외' if outdoor else '🏠 실내'}")
                     with col_r:
                         st.markdown(f"**📋 업무 내용:** {m.get('description', '')}")
                         st.markdown(f"**📸 인증 가이드:** {m.get('verification_guide', '')}")
@@ -332,9 +434,8 @@ def show_senior():
                                 st.success("🎉 지원이 완료되었습니다!")
                                 st.rerun()
                             except Exception:
-                                st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                                st.error("❌ 작업 중 오류가 발생했습니다.")
 
-    # ── Tab 2: My Applications ──
     with tab_mine:
         st.subheader("나의 지원/매칭 현황")
         my_apps = db_get_senior_applications(st.session_state["user_id"])
@@ -371,7 +472,6 @@ def show_senior():
                                     if not note.strip():
                                         st.error("❌ 완료 내용을 입력해주세요.")
                                     else:
-                                        # 사진 업로드 시도 (실패해도 텍스트는 저장)
                                         photo_url = None
                                         if photo:
                                             try:
@@ -387,7 +487,6 @@ def show_senior():
                                             except Exception:
                                                 st.warning("⚠️ 사진 업로드에 실패했습니다. 텍스트 내용으로만 제출합니다.")
 
-                                        # 사진 성공 여부와 무관하게 완료 보고서 저장
                                         try:
                                             supabase.table("applications").update({
                                                 "status":               "SUBMITTED",
@@ -397,12 +496,15 @@ def show_senior():
                                             st.success("✅ 완료 보고서가 제출되었습니다!")
                                             st.rerun()
                                         except Exception:
-                                            st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                                            st.error("❌ 작업 중 오류가 발생했습니다.")
 
 
 # ─── MAIN ROUTING ─────────────────────────────────────────────────────────────
 if not st.session_state["logged_in"]:
-    show_login()
+    if st.session_state["auth_page"] == "signup":
+        show_signup()
+    else:
+        show_login()
 else:
     show_sidebar()
     if st.session_state["user_role"] == "Employer":
