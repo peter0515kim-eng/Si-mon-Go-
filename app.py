@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 from supabase import create_client, Client
 
@@ -592,15 +593,9 @@ def show_senior():
                                 else:
                                     photo_url = None
                                     if photo:
-                                        try:
-                                            path = f"completions/{app['id']}_{photo.name}"
-                                            supabase.storage.from_("mission-photos").upload(
-                                                path, photo.read(),
-                                                {"content-type": photo.type, "upsert": "true"},
-                                            )
-                                            photo_url = supabase.storage.from_("mission-photos").get_public_url(path)
-                                        except Exception:
-                                            st.warning("사진 업로드에 실패했습니다. 텍스트만 제출합니다.")
+                                        raw = photo.read()
+                                        b64 = base64.b64encode(raw).decode()
+                                        photo_url = f"data:{photo.type};base64,{b64}"
                                     try:
                                         supabase.table("applications").update({
                                             "status": "SUBMITTED",
