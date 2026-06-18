@@ -74,12 +74,13 @@ st.markdown("""
     background: transparent !important;
 }
 
-/* ── 인증 카드 ── */
-.auth-card {
-    background: #fff;
-    border-radius: 14px;
-    padding: 40px 36px 32px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+/* ── 인증 폼 카드화 ── */
+[data-testid="stForm"] {
+    background: #fff !important;
+    border-radius: 14px !important;
+    padding: 36px 36px 28px !important;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07) !important;
+    border: none !important;
     margin-top: 40px;
 }
 .brand-name  { font-size: 28px; font-weight: 900; color: #ff4b4b; letter-spacing: -1px; }
@@ -270,16 +271,14 @@ def do_signup(email, password, nickname, role):
 def show_login():
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
-        st.markdown("""
+        with st.form("login_form"):
+            st.markdown("""
 <div class="brand-name">시몬고</div>
 <div class="brand-sub">SI-MON-GO</div>
 <div class="brand-tag">액티브 시니어를 위한 일자리 매칭 플랫폼</div>
 <hr class="auth-divider">
 <div class="auth-section-title">로그인</div>
 """, unsafe_allow_html=True)
-
-        with st.form("login_form"):
             email    = st.text_input("이메일", placeholder="example@email.com")
             password = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
             btn      = st.form_submit_button("로그인", type="primary", use_container_width=True)
@@ -293,7 +292,6 @@ def show_login():
                     else:
                         st.rerun()
 
-        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="auth-foot">아직 계정이 없으신가요?</div>', unsafe_allow_html=True)
         if st.button("회원가입", use_container_width=True):
             st.session_state["auth_page"] = "signup"
@@ -303,16 +301,15 @@ def show_login():
 def show_signup():
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
-        st.markdown("""
+        with st.form("signup_form"):
+            st.markdown("""
 <div class="brand-name">시몬고</div>
 <div class="brand-sub">SI-MON-GO</div>
 <div class="brand-tag">액티브 시니어를 위한 일자리 매칭 플랫폼</div>
 <hr class="auth-divider">
 <div class="auth-section-title">회원가입</div>
 """, unsafe_allow_html=True)
-
-        with st.form("signup_form"):
+            # form content starts inline below
             email    = st.text_input("이메일", placeholder="example@email.com")
             password = st.text_input("비밀번호", type="password", placeholder="6자 이상")
             pw_check = st.text_input("비밀번호 확인", type="password", placeholder="비밀번호를 한 번 더 입력")
@@ -343,7 +340,6 @@ def show_signup():
                         st.session_state["auth_page"] = "login"
                         st.rerun()
 
-        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="auth-foot">이미 계정이 있으신가요?</div>', unsafe_allow_html=True)
         if st.button("로그인으로 돌아가기", use_container_width=True):
             st.session_state["auth_page"] = "login"
