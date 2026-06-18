@@ -17,40 +17,14 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ─── Session State Init ──────────────────────────────────────────────────────
-if "user_role" not in st.session_state:
-    st.session_state["user_role"] = "Employer"
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
 if "user_id" not in st.session_state:
-    st.session_state["user_id"] = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-
-# ─── Sidebar ─────────────────────────────────────────────────────────────────
-st.sidebar.title("🎯 시몬고 제어 센터")
-st.sidebar.caption("사용자 역할을 선택하세요.")
-
-selected = st.sidebar.radio(
-    "역할 전환",
-    ["고용자(Employer)", "시니어(Senior)"],
-    index=0 if st.session_state["user_role"] == "Employer" else 1,
-)
-
-new_role = "Employer" if selected == "고용자(Employer)" else "Senior"
-if new_role != st.session_state["user_role"]:
-    st.session_state["user_role"] = new_role
-    st.session_state["user_id"] = (
-        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        if new_role == "Employer"
-        else "cccccccc-cccc-cccc-cccc-cccccccccccc"
-    )
-    st.rerun()
-
-if st.session_state["user_role"] == "Senior":
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("**📊 시니어 성실도 지표**")
-    st.sidebar.latex(
-        r"Sincerity\_Score = \left(\frac{N_{valid}}{N_{total}}\right) \times 100"
-    )
-    st.sidebar.caption(
-        "N_total: 총 기대 핑 수 / N_valid: 허용 반경 내 유효 위치 핑 수"
-    )
+    st.session_state["user_id"] = None
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = None
+if "user_nickname" not in st.session_state:
+    st.session_state["user_nickname"] = None
 
 # ─── DB Helper Functions ──────────────────────────────────────────────────────
 def db_get_categories():
@@ -58,7 +32,6 @@ def db_get_categories():
         return supabase.table("categories").select("*").order("id").execute().data
     except Exception:
         return []
-
 
 def db_get_all_missions():
     try:
@@ -72,19 +45,12 @@ def db_get_all_missions():
     except Exception:
         return []
 
-
 def db_get_employer_mission_ids(employer_id: str):
     try:
-        res = (
-            supabase.table("missions")
-            .select("id")
-            .eq("employer_id", employer_id)
-            .execute()
-        )
+        res = supabase.table("missions").select("id").eq("employer_id", employer_id).execute()
         return [r["id"] for r in res.data]
     except Exception:
         return []
-
 
 def db_get_applications_for_employer(employer_id: str):
     try:
@@ -102,7 +68,6 @@ def db_get_applications_for_employer(employer_id: str):
     except Exception:
         return []
 
-
 def db_get_senior_applications(senior_id: str):
     try:
         return (
@@ -116,22 +81,95 @@ def db_get_senior_applications(senior_id: str):
     except Exception:
         return []
 
-
 STATUS_LABELS = {
     "APPLIED":   ("🟡", "대기 중"),
     "ACCEPTED":  ("🟢", "매칭 수락됨"),
     "REJECTED":  ("🔴", "거절됨"),
     "SUBMITTED": ("📝", "완료 제출됨 – 고용주 확인 대기 중"),
     "COMPLETED": ("✅", "완료됨"),
+    "Pending":   ("🟡", "대기 중"),
 }
 
 
+# ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+def show_login():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.title("🎯 시몬고 (Si-Mon-GO)")
+        st.caption("데이터 기반 액티브 시니어 활력 플랫폼")
+        st.markdown("---")
+        st.subheader("로그인")
+
+        with st.form("login_form"):
+            email    = st.text_input("이메일", placeholder="example@email.com")
+            password = st.text_input("비밀번호", type="password", placeholder="비밀번호 입력")
+            login_btn = st.form_submit_button("로그인", type="primary", use_container_width=True)
+
+            if login_btn:
+                if not email.strip():
+                    st.error("❌ 이메일을 입력해주세요.")
+                else:
+                    try:
+                        res = (
+                            supabase.table("profiles")
+                            .select("id, nickname, role_type")
+                            .eq("email", email.strip())
+                            .execute()
+                        )
+                        if not res.data:
+                            st.error("❌ 등록되지 않은 이메일입니다.")
+                        else:
+                            user = res.data[0]
+                            st.session_state["logged_in"]    = True
+                            st.session_state["user_id"]      = user["id"]
+                            st.session_state["user_role"]    = user["role_type"]
+                            st.session_state["user_nickname"] = user["nickname"]
+                            st.rerun()
+                    except Exception:
+                        st.error("❌ 로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+
+        st.markdown("---")
+        with st.expander("🔑 테스트 계정 보기"):
+            st.markdown("""
+| 역할 | 이메일 | 비밀번호 |
+|------|--------|---------|
+| 고용자 | employer1@example.com | (아무거나) |
+| 고용자 | employer2@example.com | (아무거나) |
+| 시니어 | senior1@example.com   | (아무거나) |
+""")
+            st.caption("※ 현재 데모 버전은 이메일만 확인합니다.")
+
+
+# ─── SIDEBAR (로그인 후) ──────────────────────────────────────────────────────
+def show_sidebar():
+    st.sidebar.title("🎯 시몬고 제어 센터")
+    st.sidebar.markdown(f"**👤 {st.session_state['user_nickname']}**")
+    role_label = "👨‍💼 고용자" if st.session_state["user_role"] == "Employer" else "🧑 시니어"
+    st.sidebar.caption(role_label)
+    st.sidebar.markdown("---")
+
+    if st.session_state["user_role"] == "Senior":
+        st.sidebar.markdown("**📊 시니어 성실도 지표**")
+        st.sidebar.latex(
+            r"Sincerity\_Score = \left(\frac{N_{valid}}{N_{total}}\right) \times 100"
+        )
+        st.sidebar.caption("N_total: 총 기대 핑 수 / N_valid: 허용 반경 내 유효 위치 핑 수")
+        st.sidebar.markdown("---")
+
+    if st.sidebar.button("🚪 로그아웃", use_container_width=True):
+        for key in ["logged_in", "user_id", "user_role", "user_nickname"]:
+            st.session_state[key] = None
+        st.session_state["logged_in"] = False
+        st.rerun()
+
+
 # ─── EMPLOYER VIEW ────────────────────────────────────────────────────────────
-if st.session_state["user_role"] == "Employer":
+def show_employer():
     st.title("👨‍💼 고용주 관제 대시보드")
     tab_reg, tab_mgmt = st.tabs(["➕ 신규 미션 등록", "📋 지원자 현황 관리"])
 
-    # ── Tab 1: Mission Registration ──────────────────────────────────────────
+    # ── Tab 1: Mission Registration ──
     with tab_reg:
         st.subheader("신규 미션 등록 구역")
         categories = db_get_categories()
@@ -171,7 +209,7 @@ if st.session_state["user_role"] == "Employer":
                         except Exception:
                             st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
 
-    # ── Tab 2: Applicant Management ──────────────────────────────────────────
+    # ── Tab 2: Applicant Management ──
     with tab_mgmt:
         st.subheader("지원자 현황 및 매칭 결정")
         apps = db_get_applications_for_employer(st.session_state["user_id"])
@@ -190,7 +228,7 @@ if st.session_state["user_role"] == "Employer":
                     st.markdown(f"- 지원 시니어: **{profile.get('nickname', '알 수 없음')}**")
                     st.markdown(f"- 현재 상태: {icon} **{label}**")
 
-                    if status == "APPLIED":
+                    if status in ("APPLIED", "Pending"):
                         c1, c2, _ = st.columns([1, 1, 5])
                         with c1:
                             if st.button("✅ 수락", key=f"acc_{app['id']}", type="primary"):
@@ -225,7 +263,6 @@ if st.session_state["user_role"] == "Employer":
                                 supabase.table("applications").update(
                                     {"status": "COMPLETED"}
                                 ).eq("id", app["id"]).execute()
-                                # Mission auto-delete after payment (ON DELETE CASCADE cleans up applications)
                                 mission_id = (app.get("missions") or {}).get("id") or app.get("mission_id")
                                 if mission_id:
                                     supabase.table("missions").delete().eq("id", mission_id).execute()
@@ -237,11 +274,11 @@ if st.session_state["user_role"] == "Employer":
 
 
 # ─── SENIOR VIEW ──────────────────────────────────────────────────────────────
-else:
+def show_senior():
     st.title("🎯 시몬고 실시간 미션 보드")
     tab_board, tab_mine = st.tabs(["🔍 일감 찾기 보드", "🎯 나의 지원/매칭 현황"])
 
-    # ── Tab 1: Mission Board ─────────────────────────────────────────────────
+    # ── Tab 1: Mission Board ──
     with tab_board:
         all_missions   = db_get_all_missions()
         my_apps        = db_get_senior_applications(st.session_state["user_id"])
@@ -297,7 +334,7 @@ else:
                             except Exception:
                                 st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
 
-    # ── Tab 2: My Applications ───────────────────────────────────────────────
+    # ── Tab 2: My Applications ──
     with tab_mine:
         st.subheader("나의 지원/매칭 현황")
         my_apps = db_get_senior_applications(st.session_state["user_id"])
@@ -320,13 +357,12 @@ else:
                     )
                     st.markdown(f"- **상태:** {icon} {label}")
 
-                    # Completion report form — shown only for ACCEPTED missions
                     if status == "ACCEPTED":
                         with st.expander("📋 업무 완료 보고서 작성", expanded=True):
                             with st.form(f"comp_{app['id']}"):
-                                note   = st.text_area("수행한 업무 내용을 상세히 작성해주세요")
-                                photo  = st.file_uploader(
-                                    "인증 사진 첨부 (JPG/PNG)",
+                                note  = st.text_area("수행한 업무 내용을 상세히 작성해주세요")
+                                photo = st.file_uploader(
+                                    "인증 사진 첨부 (JPG/PNG) — 선택사항",
                                     type=["jpg", "jpeg", "png"],
                                 )
                                 submit = st.form_submit_button("📤 완료 제출하기", type="primary")
@@ -335,9 +371,10 @@ else:
                                     if not note.strip():
                                         st.error("❌ 완료 내용을 입력해주세요.")
                                     else:
-                                        try:
-                                            photo_url = None
-                                            if photo:
+                                        # 사진 업로드 시도 (실패해도 텍스트는 저장)
+                                        photo_url = None
+                                        if photo:
+                                            try:
                                                 path = f"completions/{app['id']}_{photo.name}"
                                                 supabase.storage.from_("mission-photos").upload(
                                                     path,
@@ -347,7 +384,11 @@ else:
                                                 photo_url = supabase.storage.from_(
                                                     "mission-photos"
                                                 ).get_public_url(path)
+                                            except Exception:
+                                                st.warning("⚠️ 사진 업로드에 실패했습니다. 텍스트 내용으로만 제출합니다.")
 
+                                        # 사진 성공 여부와 무관하게 완료 보고서 저장
+                                        try:
                                             supabase.table("applications").update({
                                                 "status":               "SUBMITTED",
                                                 "completion_note":      note.strip(),
@@ -356,6 +397,15 @@ else:
                                             st.success("✅ 완료 보고서가 제출되었습니다!")
                                             st.rerun()
                                         except Exception:
-                                            st.error(
-                                                "❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
-                                            )
+                                            st.error("❌ 작업 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+
+
+# ─── MAIN ROUTING ─────────────────────────────────────────────────────────────
+if not st.session_state["logged_in"]:
+    show_login()
+else:
+    show_sidebar()
+    if st.session_state["user_role"] == "Employer":
+        show_employer()
+    else:
+        show_senior()

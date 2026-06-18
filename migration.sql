@@ -47,9 +47,27 @@ CREATE POLICY IF NOT EXISTS "anon insert senior_details"
 CREATE POLICY IF NOT EXISTS "anon update senior_details"
   ON public.senior_details FOR UPDATE TO anon USING (true);
 
--- 4) (선택) 인증 사진 Storage 버킷 생성
---    Storage 탭 → New bucket → 이름: mission-photos → Public 체크 → Save
---    아래 SQL로도 생성 가능합니다:
--- INSERT INTO storage.buckets (id, name, public)
--- VALUES ('mission-photos', 'mission-photos', true)
--- ON CONFLICT DO NOTHING;
+-- 4) 인증 사진 Storage 버킷 생성 (Public)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('mission-photos', 'mission-photos', true)
+ON CONFLICT DO NOTHING;
+
+-- Storage RLS: anon 업로드/다운로드 허용
+CREATE POLICY IF NOT EXISTS "anon upload mission photos"
+  ON storage.objects FOR INSERT TO anon
+  WITH CHECK (bucket_id = 'mission-photos');
+
+CREATE POLICY IF NOT EXISTS "anon read mission photos"
+  ON storage.objects FOR SELECT TO anon
+  USING (bucket_id = 'mission-photos');
+
+CREATE POLICY IF NOT EXISTS "anon update mission photos"
+  ON storage.objects FOR UPDATE TO anon
+  USING (bucket_id = 'mission-photos');
+
+-- 5) profiles 테이블에 이메일 기반 고용자 계정 추가
+INSERT INTO public.profiles (id, email, nickname, role_type, phone_number)
+VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'employer1@example.com', '매지리 보안관', 'Employer', '010-1111-1111'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'employer2@example.com', '원주 사장님',   'Employer', '010-2222-2222')
+ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
