@@ -152,60 +152,145 @@ def do_signup(email: str, password: str, nickname: str, role: str):
         return f"회원가입 중 오류가 발생했습니다: {msg}"
 
 
+# ─── AUTH PAGE STYLE ─────────────────────────────────────────────────────────
+AUTH_CSS = """
+<style>
+/* 전체 배경 */
+[data-testid="stAppViewContainer"] {
+    background-color: #f7f7f7;
+}
+/* 인증 카드 */
+.auth-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 40px 36px 32px 36px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-top: 48px;
+}
+/* 브랜드 로고 영역 */
+.brand-block {
+    margin-bottom: 28px;
+}
+.brand-name {
+    font-size: 26px;
+    font-weight: 800;
+    color: #ff4b4b;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+}
+.brand-en {
+    font-size: 13px;
+    font-weight: 500;
+    color: #ff4b4b;
+    letter-spacing: 1px;
+    opacity: 0.7;
+}
+.brand-tagline {
+    font-size: 13px;
+    color: #888;
+    margin-top: 4px;
+}
+/* 섹션 제목 */
+.auth-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 20px;
+}
+/* 구분선 */
+.auth-divider {
+    border: none;
+    border-top: 1px solid #ebebeb;
+    margin: 20px 0;
+}
+/* 전환 링크 영역 */
+.auth-switch {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+    margin-top: 16px;
+}
+/* 역할 선택 박스 */
+.role-desc {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: -8px;
+    margin-bottom: 12px;
+}
+</style>
+"""
+
 # ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 def show_login():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🎯 시몬고 (Si-Mon-GO)")
-        st.caption("데이터 기반 액티브 시니어 활력 플랫폼")
-        st.markdown("---")
-        st.subheader("로그인")
+    st.markdown(AUTH_CSS, unsafe_allow_html=True)
+    _, col, _ = st.columns([1, 1.6, 1])
+    with col:
+        st.markdown("""
+<div class="auth-card">
+  <div class="brand-block">
+    <div class="brand-name">시몬고</div>
+    <div class="brand-en">SI-MON-GO</div>
+    <div class="brand-tagline">액티브 시니어를 위한 일자리 매칭 플랫폼</div>
+  </div>
+  <hr class="auth-divider">
+  <div class="auth-title">로그인</div>
+</div>
+""", unsafe_allow_html=True)
 
         with st.form("login_form"):
-            email     = st.text_input("이메일", placeholder="example@email.com")
-            password  = st.text_input("비밀번호", type="password", placeholder="비밀번호 입력")
+            email     = st.text_input("이메일", placeholder="example@email.com", label_visibility="visible")
+            password  = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
             login_btn = st.form_submit_button("로그인", type="primary", use_container_width=True)
 
             if login_btn:
                 if not email.strip() or not password.strip():
-                    st.error("❌ 이메일과 비밀번호를 모두 입력해주세요.")
+                    st.error("이메일과 비밀번호를 모두 입력해주세요.")
                 else:
                     err = do_login(email.strip(), password.strip())
                     if err:
-                        st.error(f"❌ {err}")
+                        st.error(err)
                     else:
                         st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("계정이 없으신가요?")
-        if st.button("회원가입하기", use_container_width=True):
+        st.markdown("""
+<div class="auth-switch">
+    아직 계정이 없으신가요?
+</div>
+""", unsafe_allow_html=True)
+        if st.button("회원가입", use_container_width=True):
             st.session_state["auth_page"] = "signup"
             st.rerun()
 
 
 # ─── SIGNUP PAGE ──────────────────────────────────────────────────────────────
 def show_signup():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🎯 시몬고 (Si-Mon-GO)")
-        st.caption("데이터 기반 액티브 시니어 활력 플랫폼")
-        st.markdown("---")
-        st.subheader("회원가입")
+    st.markdown(AUTH_CSS, unsafe_allow_html=True)
+    _, col, _ = st.columns([1, 1.6, 1])
+    with col:
+        st.markdown("""
+<div class="auth-card">
+  <div class="brand-block">
+    <div class="brand-name">시몬고</div>
+    <div class="brand-en">SI-MON-GO</div>
+    <div class="brand-tagline">액티브 시니어를 위한 일자리 매칭 플랫폼</div>
+  </div>
+  <hr class="auth-divider">
+  <div class="auth-title">회원가입</div>
+</div>
+""", unsafe_allow_html=True)
 
         with st.form("signup_form"):
-            email    = st.text_input("이메일 *", placeholder="example@email.com")
-            password = st.text_input("비밀번호 *", type="password", placeholder="6자 이상")
-            pw_check = st.text_input("비밀번호 확인 *", type="password", placeholder="비밀번호 재입력")
-            nickname = st.text_input("닉네임 *", placeholder="앱에서 표시될 이름")
+            email    = st.text_input("이메일", placeholder="example@email.com")
+            password = st.text_input("비밀번호", type="password", placeholder="6자 이상 입력")
+            pw_check = st.text_input("비밀번호 확인", type="password", placeholder="비밀번호를 한 번 더 입력")
+            nickname = st.text_input("닉네임", placeholder="서비스에서 표시될 이름")
 
-            st.markdown("**역할 선택 \\***")
+            st.markdown("**나는**")
             role = st.radio(
                 "역할",
                 options=["Senior", "Employer"],
-                format_func=lambda r: "🧑 시니어 (일감 수행)" if r == "Senior" else "👨‍💼 고용주 (일감 등록)",
-                horizontal=True,
+                format_func=lambda r: "시니어  —  일감을 찾고 있어요" if r == "Senior" else "고용주  —  일손을 구하고 있어요",
+                horizontal=False,
                 label_visibility="collapsed",
             )
 
@@ -226,18 +311,21 @@ def show_signup():
 
                 if errors:
                     for e in errors:
-                        st.error(f"❌ {e}")
+                        st.error(e)
                 else:
                     err = do_signup(email.strip(), password.strip(), nickname.strip(), role)
                     if err:
-                        st.error(f"❌ {err}")
+                        st.error(err)
                     else:
-                        st.success("✅ 가입이 완료되었습니다! 로그인 페이지로 이동합니다...")
+                        st.success("가입이 완료되었습니다. 로그인 페이지로 이동합니다.")
                         st.session_state["auth_page"] = "login"
                         st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("이미 계정이 있으신가요?")
+        st.markdown("""
+<div class="auth-switch">
+    이미 계정이 있으신가요?
+</div>
+""", unsafe_allow_html=True)
         if st.button("로그인으로 돌아가기", use_container_width=True):
             st.session_state["auth_page"] = "login"
             st.rerun()
